@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { KokoroTTS } from "kokoro-js";
@@ -12,6 +13,8 @@ const MODEL_ID = process.env.KOKORO_MODEL_ID || "onnx-community/Kokoro-82M-v1.0-
 const DTYPE = process.env.KOKORO_DTYPE || "q8";
 
 const app = express();
+// Open API: no key, no auth, any origin can call it.
+app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -58,7 +61,20 @@ app.get("/api/voices", async (req, res) => {
   }
 });
 
-app.post("/api/tts", async (req, res) => {
+// GET variant: no key needed, works directly from a browser URL, an
+// <audio src="..."> tag, or `curl "…/api/tts?text=hello" -o out.wav`.
+app.get("/api/tts", async (req, res) => {
+  req.body = {
+    text: req.query.text,
+    voice: req.query.voice,
+    speed: req.query.speed,
+  };
+  return handleTTS(req, res);
+});
+
+app.post("/api/tts", async (req, res) => handleTTS(req, res));
+
+async function handleTTS(req, res) {
   try {
     const { text, voice = "af_heart", speed = 1 } = req.body || {};
 
@@ -85,7 +101,7 @@ app.post("/api/tts", async (req, res) => {
     console.error("TTS generation failed:", err);
     res.status(500).json({ error: "TTS generation failed.", details: err.message });
   }
-});
+}
 
 app.listen(PORT, () => {
   console.log(`Free Kokoro TTS server listening on port ${PORT}`);

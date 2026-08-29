@@ -31,6 +31,26 @@ Then open `http://localhost:3000`. The very first request downloads the model we
 
 > Note: Render's free plan spins the service down after inactivity, and the free plan's disk isn't persistent, so the model re-downloads on cold starts. It's still free and unlimited in terms of usage/quota — just budget for that first-request delay after idling.
 
+## Public API (no key required)
+
+Both endpoints below are fully open: no API key, no auth header, CORS enabled for any origin.
+
+```bash
+# GET — easiest, works in a browser too
+curl "https://YOUR-APP.onrender.com/api/tts?text=Hello%20world&voice=af_heart&speed=1" -o out.wav
+
+# POST — same result, JSON body
+curl -X POST https://YOUR-APP.onrender.com/api/tts \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello world","voice":"af_heart","speed":1}' \
+  -o out.wav
+
+# List available voices
+curl https://YOUR-APP.onrender.com/api/voices
+```
+
+Parameters: `text` (required, max 5000 chars), `voice` (optional, default `af_heart`, see `/api/voices` for the full list), `speed` (optional, 0.5–2, default 1).
+
 ## Configuration
 
 Environment variables (all optional):
