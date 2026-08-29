@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Free Kokoro TTS</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --border: #232733;
+    --text: #e8eaed;
+    --muted: #8b93a3;
+    --accent: #6d8dff;
+    --accent-hover: #8aa2ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+  main {
+    width: 100%;
+    max-width: 640px;
+  }
+  h1 {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+  p.subtitle {
+    color: var(--muted);
+    margin-top: 0;
+    margin-bottom: 24px;
+    font-size: 0.9rem;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    resize: vertical;
+    background: #0d0f15;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 12px;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+  .row {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .row > div { flex: 1; min-width: 140px; }
+  select, input[type=range] {
+    width: 100%;
+    background: #0d0f15;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px;
+    font-size: 0.9rem;
+  }
+  button {
+    margin-top: 18px;
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #0b0d12;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  button:hover:not(:disabled) { background: var(--accent-hover); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  audio {
+    width: 100%;
+    margin-top: 18px;
+    display: none;
+  }
+  .status {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    min-height: 1.2em;
+  }
+  .status.error { color: #ff6b6b; }
+  a.download {
+    display: none;
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--accent);
+    text-decoration: none;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Free Kokoro TTS</h1>
+  <p class="subtitle">Self-hosted, unlimited text-to-speech. Runs the Kokoro-82M model directly on this server — no API keys, no quotas.</p>
+
+  <div class="card">
+    <label for="text">Text</label>
+    <textarea id="text" placeholder="Type something to hear it spoken...">Hello! This is a free, self-hosted text to speech demo powered by Kokoro.</textarea>
+
+    <div class="row">
+      <div>
+        <label for="voice">Voice</label>
+        <select id="voice"><option value="af_heart">Loading voices...</option></select>
+      </div>
+      <div>
+        <label for="speed">Speed: <span id="speedVal">1.0x</span></label>
+        <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1" />
+      </div>
+    </div>
+
+    <button id="generate">Generate speech</button>
+    <div class="status" id="status"></div>
+    <audio id="player" controls></audio>
+    <a class="download" id="download" download="speech.wav">Download WAV</a>
+  </div>
+</main>
+
+<script>
+  const textEl = document.getElementById("text");
+  const voiceEl = document.getElementById("voice");
+  const speedEl = document.getElementById("speed");
+  const speedVal = document.getElementById("speedVal");
+  const btn = document.getElementById("generate");
+  const statusEl = document.getElementById("status");
+  const player = document.getElementById("player");
+  const downloadLink = document.getElementById("download");
+
+  speedEl.addEventListener("input", () => {
+    speedVal.textContent = Number(speedEl.value).toFixed(1) + "x";
+  });
+
+  async function loadVoices() {
+    try {
+      const res = await fetch("/api/voices");
+      const data = await res.json();
+      const entries = Object.entries(data.voices || {});
+      if (!entries.length) throw new Error("no voices");
+      voiceEl.innerHTML = entries
+        .map(([id, v]) => `<option value="${id}">${v.name || id} (${v.language || ""}, ${v.gender || ""})</option>`)
+        .join("");
+      voiceEl.value = entries.some(([id]) => id === "af_heart") ? "af_heart" : entries[0][0];
+    } catch (e) {
+      voiceEl.innerHTML = '<option value="af_heart">af_heart (default)</option>';
+    }
+  }
+  loadVoices();
+
+  btn.addEventListener("click", async () => {
+    const text = textEl.value.trim();
+    if (!text) {
+      statusEl.textContent = "Type some text first.";
+      statusEl.className = "status error";
+      return;
+    }
+
+    btn.disabled = true;
+    statusEl.className = "status";
+    statusEl.textContent = "Generating audio locally on the server (first request may take a bit while the model loads)...";
+    player.style.display = "none";
+    downloadLink.style.display = "none";
+
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice: voiceEl.value, speed: Number(speedEl.value) }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Request failed (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      player.src = url;
+      player.style.display = "block";
+      player.play();
+      downloadLink.href = url;
+      downloadLink.style.display = "inline-block";
+      statusEl.textContent = "Done.";
+    } catch (e) {
+      statusEl.textContent = "Error: " + e.message;
+      statusEl.className = "status error";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: free-kokoro-tts
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: KOKORO_DTYPE
+        value: q8
+    healthCheckPath: /api/health
